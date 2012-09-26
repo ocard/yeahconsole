@@ -1,6 +1,10 @@
 Please read all of this to fully understand options/features of yeahconsole...
 Since I'm lazy this  file is also a CHANGELOG...
 
+New in 0.3.5:
+yOffset:        y position (defaults to 0)
+xrandrSupport:  draw yeahconsole on the screen with the currently selected window
+
 New in 0.3.4:
 Readded the help message (yeahconsole -h).
 Resizing the console with the mouse has been improved.

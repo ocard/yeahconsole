@@ -5,7 +5,7 @@ INSTALL = install
 
 PREFIX = /usr/local
 
-LIBS = -lX11 
+LIBS = -lX11 -lXrandr
 INCLUDES = -I/usr/X11R6/include 
 LIB_DIRS = -L/usr/X11R6/lib
 FLAGS = -Os -Wall

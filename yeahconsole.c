@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <X11/extensions/Xrandr.h>
 
 
 #define UP 0
@@ -47,8 +48,8 @@ Window termwin;
 char *progname, command[256];
 int revert_to;
 int screen;
-int opt_x, opt_y, opt_width, opt_height, opt_delay, opt_bw, opt_step,
-  height, opt_restart, opt_restart_hidden;
+int opt_x, opt_x_orig, opt_y, opt_y_orig, opt_width, opt_height, opt_delay,
+	opt_bw, opt_step, opt_xrandr, height, opt_restart, opt_restart_hidden;
 char *opt_color;
 char *opt_term;
 KeySym opt_key;
@@ -58,6 +59,10 @@ KeySym opt_key_full;
 Cursor cursor;
 int resize_inc;
 void roll(int i);
+int get_screen_geom(Window last_focused, int *x, int *y, int *w, int *h);
+Window get_toplevel_parent(Window window);
+void resize_term(int w, int h);
+void update_geom(Window last_focused);
 void get_defaults(void);
 KeySym grab_that_key(char *opt, unsigned int numlockmask);
 void init_win(void);
@@ -96,6 +101,7 @@ int main(int argc, char *argv[])
 		   "restart:               0\n"
 		   "xOffset:               0\n"
 		   "yOffset:               0\n"
+		   "xrandrSupport:         0\n"
 		   "screenWidth:           Display width\n"
 		   "consoleHeight:         10\n"
 		   "aniDelay:              40\n"
@@ -148,6 +154,7 @@ int main(int argc, char *argv[])
 		} else {
 		    XRaiseWindow(dpy, win);
 		    XGetInputFocus(dpy, &last_focused, &revert_to);
+		    last_focused = get_toplevel_parent(last_focused);
 		    XSetInputFocus(dpy, termwin, RevertToPointerRoot,
 				   CurrentTime);
 
@@ -156,6 +163,8 @@ int main(int argc, char *argv[])
 			roll(DOWN);
 			XUngrabServer(dpy);
 		    }
+			else if (opt_xrandr)
+				update_geom(last_focused);
 		    XMoveWindow(dpy, win, opt_x, opt_y);
 
 		    transparency_hack();
@@ -168,6 +177,12 @@ int main(int argc, char *argv[])
 		    if (!fullscreen) {
 			old_height = height;
 			height = DisplayHeight(dpy, screen);
+			if (opt_xrandr) {
+				int tmp, tmp2;
+				if (get_screen_geom(win, &tmp, &tmp, &tmp, &tmp2))
+					height = tmp2;
+			}
+			height -=  opt_y_orig + opt_bw;
 			fullscreen = 1;
 		    } else {
 			height = old_height;
@@ -236,6 +251,82 @@ void roll(int i)
 
 }
 
+int get_screen_geom(Window last_focused, int *x, int *y, int *w, int *h)
+{
+	int i;
+	XWindowAttributes wa;
+	XRRScreenResources *resources;
+	XRRCrtcInfo *monitor_info;
+
+	XGetWindowAttributes(dpy, last_focused, &wa);
+	/* TODO externalize resources */
+	resources = XRRGetScreenResourcesCurrent(dpy, last_focused);
+
+	for (i = 0; i < resources->ncrtc; i++) {
+		monitor_info = XRRGetCrtcInfo(dpy, resources, resources->crtcs[i]);
+		if (wa.x >= monitor_info->x && wa.x <= monitor_info->x + monitor_info->width &&
+				wa.y >= monitor_info->y && wa.y <= monitor_info->y + monitor_info->height) {
+			*x = monitor_info->x;
+			*y = monitor_info->y;
+			*w = monitor_info->width;
+			*h = monitor_info->height;
+			return 1;
+		}
+	}
+	return 0;
+}
+
+Window get_toplevel_parent(Window window)
+{
+	Window parent;
+	Window root;
+	Window *children;
+	unsigned int num_children;
+
+	while (1) {
+		if (0 == XQueryTree(dpy, window, &root, &parent, &children, &num_children)) {
+			return (Window) NULL;
+		}
+		if (children) {
+			XFree(children);
+		}
+		if (window == root || parent == root) {
+			return window;
+		}
+		else {
+			window = parent;
+		}
+	}
+
+	return (Window) NULL;
+}
+
+void resize_term(int w, int h)
+{
+	XResizeWindow(dpy, termwin, w, h);
+	XResizeWindow(dpy, win, w, h + opt_bw);
+	XSync(dpy, False);
+}
+
+void update_geom(Window last_focused) /* Determine the position of the currently selected
+										 window and open console on that screen */
+{
+	int x, y, w, h;
+	x = y = w = h = -1;
+	XWindowAttributes wa;
+
+	if (!get_screen_geom(last_focused, &x, &y, &w, &h))
+		return;
+
+	XGetWindowAttributes(dpy, win, &wa);
+	if (wa.width != w) {
+		opt_width = w;
+		resize_term(opt_width, height);
+	}
+	opt_x = x + opt_x_orig;
+	opt_y = y + opt_y_orig;
+}
+
 void get_defaults()
 {
     char *opt;
@@ -260,6 +351,8 @@ void get_defaults()
     XFreeModifiermap(modmap);
     opt = XGetDefault(dpy, progname, "screenWidth");
     opt_width = opt ? atoi(opt) : DisplayWidth(dpy, screen);
+    opt = XGetDefault(dpy, progname, "xrandrSupport");
+    opt_xrandr = opt ? atoi(opt) : 0;
     opt = XGetDefault(dpy, progname, "handleColor");
     opt_color = opt ? opt : "grey70";
     opt = XGetDefault(dpy, progname, "handleWidth");
@@ -267,13 +360,13 @@ void get_defaults()
     opt = XGetDefault(dpy, progname, "consoleHeight");
     opt_height = opt ? atoi(opt) : 10;
     opt = XGetDefault(dpy, progname, "xOffset");
-    opt_x = opt ? atoi(opt) : 0;
+    opt_x = opt_x_orig = opt ? atoi(opt) : 0;
     opt = XGetDefault(dpy, progname, "yOffset");
-    opt_y = opt ? atoi(opt) : 0;
+    opt_y = opt_y_orig = opt ? atoi(opt) : 0;
     opt = XGetDefault(dpy, progname, "aniDelay");
     opt_delay = opt ? atoi(opt) : 40;
     opt = XGetDefault(dpy, progname, "stepSize");
-    opt_step = opt ? atoi(opt) : 1;
+    opt_step = opt_xrandr ? 0 : opt ? atoi(opt) : 1;
     opt = XGetDefault(dpy, progname, "restart");
     opt_restart = opt ? atoi(opt) : 0;
     opt = XGetDefault(dpy, progname, "restartHidden");
