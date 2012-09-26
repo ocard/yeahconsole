@@ -47,7 +47,7 @@ Window termwin;
 char *progname, command[256];
 int revert_to;
 int screen;
-int opt_x, opt_width, opt_height, opt_delay, opt_bw, opt_step,
+int opt_x, opt_y, opt_width, opt_height, opt_delay, opt_bw, opt_step,
   height, opt_restart, opt_restart_hidden;
 char *opt_color;
 char *opt_term;
@@ -95,6 +95,7 @@ int main(int argc, char *argv[])
 		   "term:                  xterm\n"
 		   "restart:               0\n"
 		   "xOffset:               0\n"
+		   "yOffset:               0\n"
 		   "screenWidth:           Display width\n"
 		   "consoleHeight:         10\n"
 		   "aniDelay:              40\n"
@@ -155,7 +156,7 @@ int main(int argc, char *argv[])
 			roll(DOWN);
 			XUngrabServer(dpy);
 		    }
-		    XMoveWindow(dpy, win, opt_x, 0);
+		    XMoveWindow(dpy, win, opt_x, opt_y);
 
 		    transparency_hack();
 		    hidden = 0;
@@ -267,6 +268,8 @@ void get_defaults()
     opt_height = opt ? atoi(opt) : 10;
     opt = XGetDefault(dpy, progname, "xOffset");
     opt_x = opt ? atoi(opt) : 0;
+    opt = XGetDefault(dpy, progname, "yOffset");
+    opt_y = opt ? atoi(opt) : 0;
     opt = XGetDefault(dpy, progname, "aniDelay");
     opt_delay = opt ? atoi(opt) : 40;
     opt = XGetDefault(dpy, progname, "stepSize");
