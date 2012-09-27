@@ -152,9 +152,9 @@ int main(int argc, char *argv[])
 						hidden = 1;
 						XSync(dpy, False);
 					} else {
-						XRaiseWindow(dpy, win);
 						XGetInputFocus(dpy, &last_focused, &revert_to);
 						last_focused = get_toplevel_parent(last_focused);
+						XRaiseWindow(dpy, win);
 						XSetInputFocus(dpy, termwin, RevertToPointerRoot,
 								CurrentTime);
 
@@ -169,6 +169,7 @@ int main(int argc, char *argv[])
 
 						transparency_hack();
 						hidden = 0;
+						XSync(dpy, False);
 					}
 					break;
 				}
@@ -199,10 +200,12 @@ int main(int argc, char *argv[])
 					XResizeWindow(dpy, termwin, opt_width, height);
 					XResizeWindow(dpy, win, opt_width, height + opt_bw);
 					/* XSetInputFocus(dpy, termwin, RevertToPointerRoot, CurrentTime); */
+					XSync(dpy, False);
 				}
 				break;
 			case ButtonPress:
 				resize();
+				XSync(dpy, False);
 				break;
 			case UnmapNotify:
 				if (event.xunmap.window == termwin) {
