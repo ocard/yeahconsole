@@ -14,7 +14,7 @@ OBJECTS := yeahconsole.o
 SOURCES := yeahconsole.c
 
 $(TARGET): $(OBJECTS) 
-	$(CC) $(DEFINES) $(INCLUDES) $(LIB_DIRS) $(LIBS) -o $@ $<
+	$(CC) $(DEFINES) $(INCLUDES) $(LIB_DIRS) -o $@ $(LIBS) $<
 	strip $@
 
 $(OBJECTS): $(SOURCES) 
