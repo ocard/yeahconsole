@@ -197,10 +197,8 @@ int main(int argc, char *argv[])
 						height -= resize_inc;
 					if (height < resize_inc)
 						height = resize_inc;
-					XResizeWindow(dpy, termwin, opt_width, height);
-					XResizeWindow(dpy, win, opt_width, height + opt_bw);
+					resize_term(opt_width, height);
 					/* XSetInputFocus(dpy, termwin, RevertToPointerRoot, CurrentTime); */
-					XSync(dpy, False);
 				}
 				break;
 			case ButtonPress:
@@ -472,10 +470,11 @@ void init_xterm(move)
 	if (move)
 		height = resize_inc * opt_height;
 	XFree(size);
-	XResizeWindow(dpy, termwin, opt_width, height);
-	XResizeWindow(dpy, win, opt_width, height + opt_bw);
-	if (move)
+	resize_term(opt_width, height);
+	if (move) {
 		XMoveWindow(dpy, win, opt_x, -(height + opt_bw));
+		XSync(dpy, False);
+	}
 }
 
 void init_command(int argc, char *argv[])
@@ -516,9 +515,7 @@ void resize()
 			case MotionNotify:
 				if (ev.xmotion.y >= resize_inc) {
 					height = ev.xmotion.y - ev.xmotion.y % resize_inc;
-					XResizeWindow(dpy, termwin, opt_width, height);
-					XResizeWindow(dpy, win, opt_width, height + opt_bw);
-					XSync(dpy, False);
+					resize_term(opt_width, height);
 					break;
 					case ButtonRelease:
 					XUngrabPointer(dpy, CurrentTime);
