@@ -77,9 +77,10 @@ int main(int argc, char *argv[])
 	XEvent event;
 	int hidden = 1;
 	int fullscreen = 0;
-	int i;
+	int i, tmp;
 	int old_height = 0;
-	Window last_focused, current_focused;
+	Window tmpwin, last_focused, current_focused;
+	XWindowAttributes wa;
 
 	/* strip the path from argv[0] if there is one */
 	progname = strrchr(argv[0], '/');
@@ -128,13 +129,27 @@ int main(int argc, char *argv[])
 	while (1) {
 		XNextEvent(dpy, &event);
 		switch (event.type) {
+			case FocusOut:
+				/* When running a multi-monitor setup and the mouse is on screen
+				 * A and Firefox is focused on screen B, Firefox steals the
+				 * focus from yeahconsole with a 1x1 pixel window. To prevent
+				 * this issue, a refocus is performed after losing the focus */
+				XGetInputFocus(dpy, &tmpwin, &tmp);
+				XGetWindowAttributes(dpy, tmpwin, &wa);
+				if (wa.x == -1 && wa.y == -1 && wa.width == 1 && wa.height == 1 && !hidden)
+					XSetInputFocus(dpy, termwin, RevertToPointerRoot,
+							CurrentTime);
+				break;
 			case EnterNotify:
 				XSetInputFocus(dpy, termwin, RevertToPointerRoot, CurrentTime);
+				XSync(dpy, False);
 				break;
 			case LeaveNotify:
-				if (last_focused && event.xcrossing.detail != NotifyInferior)
+				if (last_focused && event.xcrossing.detail != NotifyInferior) {
 					XSetInputFocus(dpy, last_focused, RevertToPointerRoot,
 							CurrentTime);
+					XSync(dpy, False);
+				}
 				break;
 			case KeyPress:
 				key = XKeycodeToKeysym(dpy, event.xkey.keycode, 0);
@@ -440,7 +455,7 @@ void init_win()
 			CWOverrideRedirect | CWBackPixel, &attrib);
 	XSelectInput(dpy, win,
 			SubstructureNotifyMask | EnterWindowMask | LeaveWindowMask
-			| KeyPressMask | ButtonPressMask | ButtonReleaseMask);
+			| KeyPressMask | ButtonPressMask | ButtonReleaseMask | FocusChangeMask);
 	XAllocNamedColor(dpy, DefaultColormap(dpy, screen), opt_color, &color,
 			&dummy_color);
 	XSetWindowBackground(dpy, win, color.pixel);
