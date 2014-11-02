@@ -217,7 +217,7 @@ main(int argc, char *argv[]) {
 					height = resize_inc;
 				/* readjust height to new resize_inc, +5 prevents the window
 				 * from getting too small */
-				height = (height / resize_inc) * resize_inc + opt_bw + 5;
+				height = (height / resize_inc) * resize_inc + 5;
 				tmp = get_display_height() - (opt_y_orig + opt_bw);
 				if(height > tmp)
 					height = tmp;
@@ -521,6 +521,7 @@ init_xterm(move) {
 
 void
 resize() {
+	int tmp;
 	XEvent ev;
 	if(!XGrabPointer
 	   (dpy, root, False,
@@ -528,14 +529,18 @@ resize() {
 		GrabModeAsync, GrabModeAsync, None, cursor,
 		CurrentTime) == GrabSuccess)
 		return;
-	for(;;) {
+	resize_inc = get_height_inc();
+	while(1) {
 		XMaskEvent(dpy,
 				   ButtonPressMask | ButtonReleaseMask |
 				   PointerMotionHintMask, &ev);
 		switch (ev.type) {
 		case MotionNotify:
 			if(ev.xmotion.y >= resize_inc) {
-				height = ev.xmotion.y - ev.xmotion.y % resize_inc;
+				height = ev.xmotion.y - ev.xmotion.y % resize_inc + 5;
+				tmp = get_display_height() - (opt_y_orig + opt_bw);
+				if(height > tmp)
+					height = tmp;
 				resize_term(opt_width, height);
 				break;
 		case ButtonRelease:
