@@ -351,14 +351,13 @@ get_optimal_height(int h) {
 	int height, dh;
 
 	resize_inc = get_height_inc();
-	height = (h / resize_inc) * resize_inc;
-	if (!height) height = resize_inc;
 	/* readjust height to new resize_inc, +5 prevents the window
 	 * from getting too small */
-	if (height == resize_inc) height += 5;
+	height = (h / resize_inc) * resize_inc + 5;
+	if (!height) height = resize_inc;
 	dh = get_display_height() - (opt_y_orig + opt_bw);
 	if(height > dh)
-		height = (dh / resize_inc) * resize_inc;
+		height = (dh / resize_inc) * resize_inc + 5;
 	return height;
 }
 
@@ -463,15 +462,15 @@ init_command(int argc, char *argv[]) {
 	char *pos;
 	pos = command;
 	if(strstr(opt_term, "urxvt"))
-		pos +=
-			sprintf(pos, "%s -b 0 -embed %d -name %s ", opt_term, (int) win,
+		pos += sprintf(pos, "%s -b 0 -embed %d -name %s ", opt_term, (int) win,
 					progname);
-	if(strstr(opt_term, "st"))
-		pos += sprintf(pos, "%s -w %d -t %s ", opt_term, (int) win, progname);
 	else
-		pos +=
-			sprintf(pos, "%s -b 0 -into %d -name %s ", opt_term, (int) win,
+		if(strstr(opt_term, "st"))
+			pos += sprintf(pos, "%s -w %d -t %s ", opt_term, (int) win,
 					progname);
+		else
+			pos += sprintf(pos, "%s -b 0 -into %d -name %s ", opt_term, (int)
+					win, progname);
 	for(i = 1; i < argc; i++) {
 		pos += sprintf(pos, "%s ", argv[i]);
 
@@ -518,11 +517,10 @@ init_xterm(move) {
 	}
 
 	XSetWindowBorderWidth(dpy, termwin, 0);
-	resize_inc = get_height_inc();
-	if(move)
-		height = resize_inc * opt_height;
-	resize_term(opt_width, height);
 	if(move) {
+		resize_inc = get_height_inc();
+		height = get_optimal_height(resize_inc * opt_height);
+		resize_term(opt_width, height);
 		XMoveWindow(dpy, win, opt_x, -(height + opt_bw));
 		XSync(dpy, False);
 	}
