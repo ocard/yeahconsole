@@ -172,11 +172,6 @@ main(int argc, char *argv[]) {
 				else {
 					XGetInputFocus(dpy, &last_focused, &revert_to);
 					last_focused = get_toplevel_parent(last_focused);
-					XMoveWindow(dpy, win, opt_x, opt_y);
-					XMapWindow(dpy, win);
-					XRaiseWindow(dpy, win);
-					XSetInputFocus(dpy, termwin, RevertToPointerRoot,
-								   CurrentTime);
 
 					if(opt_step && !fullscreen) {
 						XGrabServer(dpy);
@@ -185,6 +180,11 @@ main(int argc, char *argv[]) {
 					}
 					else if(opt_xrandr)
 						update_geom(last_focused);
+					XMoveWindow(dpy, win, opt_x, opt_y);
+					XMapWindow(dpy, win);
+					XRaiseWindow(dpy, win);
+					XSetInputFocus(dpy, termwin, RevertToPointerRoot,
+								   CurrentTime);
 					hidden = 0;
 					XSync(dpy, False);
 					XSetInputFocus(dpy, termwin, RevertToPointerRoot,
@@ -364,9 +364,9 @@ get_screen_geom(Window last_focused, int *x, int *y, int *w, int *h) {
 	for(i = 0; i < resources->ncrtc; i++) {
 		monitor_info = XRRGetCrtcInfo(dpy, resources, resources->crtcs[i]);
 		if(wa.x >= monitor_info->x
-		   && wa.x <= monitor_info->x + monitor_info->width
+		   && wa.x <= monitor_info->x + monitor_info->width - 1
 		   && wa.y >= monitor_info->y
-		   && wa.y <= monitor_info->y + monitor_info->height) {
+		   && wa.y <= monitor_info->y + monitor_info->height - 1) {
 			*x = monitor_info->x;
 			*y = monitor_info->y;
 			*w = monitor_info->width;
@@ -447,7 +447,6 @@ handle_xerror(Display * display, XErrorEvent * e) {
 
 void
 init_command(int argc, char *argv[]) {
-
 	int i;
 	char *pos;
 	pos = command;
@@ -593,6 +592,5 @@ roll(int i) {
 		if(i / x == 0 || i < -(height + opt_bw))
 			break;
 	}
-
 }
 
