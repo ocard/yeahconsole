@@ -25,6 +25,8 @@
 /*  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.            */
 /*************************************************************************/
 
+/* Indentation: indent -brf -br -ut -ts4 -i4 -nsaf -nsai -nsaw -npcs *.c */
+
 #include <X11/Xlib.h>
 #include <X11/keysym.h>
 #include <X11/Xutil.h>
@@ -56,23 +58,23 @@ KeySym opt_key_bigger;
 KeySym opt_key_full;
 Cursor cursor;
 int resize_inc;
-void roll(int i);
+void get_defaults(void);
 int get_display_height();
 int get_height_inc();
 int get_screen_geom(Window last_focused, int *x, int *y, int *w, int *h);
 Window get_toplevel_parent(Window window);
-void resize_term(int w, int h);
-void update_geom(Window last_focused);
-void get_defaults(void);
 KeySym grab_that_key(char *opt, unsigned int numlockmask);
+int handle_xerror(Display * display, XErrorEvent * e);
+void init_command(int argc, char *argv[]);
 void init_win(void);
 void init_xterm(int move);
-void init_command(int argc, char *argv[]);
 void resize(void);
-int handle_xerror(Display * display, XErrorEvent * e);
+void resize_term(int w, int h);
+void roll(int i);
+void update_geom(Window last_focused);
 
-int main(int argc, char *argv[])
-{
+int
+main(int argc, char *argv[]) {
 	KeySym key;
 	XEvent event;
 	int hidden = 1;
@@ -84,38 +86,37 @@ int main(int argc, char *argv[])
 
 	/* strip the path from argv[0] if there is one */
 	progname = strrchr(argv[0], '/');
-	if (!progname)
+	if(!progname)
 		progname = argv[0];
 	else
 		progname++;
 
-	for (i = 1; i < argc; i++) {
-		if (!strcmp(argv[i], "-h") )
-		{
+	for(i = 1; i < argc; i++) {
+		if(!strcmp(argv[i], "-h")) {
 			printf("%s:\n"
-					"-e: program to execute\n"
-					"you can configure me via xresources:\n"
-					"%s*foo:value\n"
-					"foo can be any standard xterm/urxvt/st xresource or:\n"
-					"resource               default value\n\n"
-					"term:                  xterm\n"
-					"restart:               0\n"
-					"xOffset:               0\n"
-					"yOffset:               0\n"
-					"xrandrSupport:         0\n"
-					"screenWidth:           Display width\n"
-					"consoleHeight:         10\n"
-					"aniDelay:              40\n"
-					"stepSize;              1\n"
-					"toggleKey:             ControlAlt+y\n"
-					"keySmaller:            Control+KP_Subtract\n"
-					"keyBigger:             Control+KP_Add\n"
-					"keyFull:               Alt+F11\n", progname, progname);
+				   "-e: program to execute\n"
+				   "you can configure me via xresources:\n"
+				   "%s*foo:value\n"
+				   "foo can be any standard xterm/urxvt/st xresource or:\n"
+				   "resource               default value\n\n"
+				   "term:                  xterm\n"
+				   "restart:               0\n"
+				   "xOffset:               0\n"
+				   "yOffset:               0\n"
+				   "xrandrSupport:         0\n"
+				   "screenWidth:           Display width\n"
+				   "consoleHeight:         10\n"
+				   "aniDelay:              40\n"
+				   "stepSize;              1\n"
+				   "toggleKey:             ControlAlt+y\n"
+				   "keySmaller:            Control+KP_Subtract\n"
+				   "keyBigger:             Control+KP_Add\n"
+				   "keyFull:               Alt+F11\n", progname, progname);
 			exit(0);
 		}
 	}
 
-	if (!(dpy = XOpenDisplay(NULL))) {
+	if(!(dpy = XOpenDisplay(NULL))) {
 		fprintf(stderr, " can not open dpy %s", XDisplayName(NULL));
 	}
 	screen = DefaultScreen(dpy);
@@ -126,253 +127,142 @@ int main(int argc, char *argv[])
 	init_win();
 	init_command(argc, argv);
 	init_xterm(1);
-	while (1) {
+	while(1) {
 		XNextEvent(dpy, &event);
 		switch (event.type) {
-			case FocusOut:
-				/* When running a multi-monitor setup and the mouse is on screen
-				 * A and Firefox is focused on screen B, Firefox steals the
-				 * focus from yeahconsole with a 1x1 pixel window. To prevent
-				 * this issue, a refocus is performed after losing the focus */
-				XGetInputFocus(dpy, &tmpwin, &tmp);
-				XGetWindowAttributes(dpy, tmpwin, &wa);
-				if (wa.x == -1 && wa.y == -1 && wa.width == 1 && wa.height == 1 && !hidden)
-					XSetInputFocus(dpy, termwin, RevertToPointerRoot,
-							CurrentTime);
-				break;
-			case EnterNotify:
-				XSetInputFocus(dpy, termwin, RevertToPointerRoot, CurrentTime);
-				XSync(dpy, False);
-				break;
-			case LeaveNotify:
-				if (last_focused && event.xcrossing.detail != NotifyInferior) {
-					XSetInputFocus(dpy, last_focused, RevertToPointerRoot,
-							CurrentTime);
-					XSync(dpy, False);
-				}
-				break;
-			case KeyPress:
-				key = XKeycodeToKeysym(dpy, event.xkey.keycode, 0);
-				if (key == opt_key) {
-					if (!hidden) {
-						XGetInputFocus(dpy, &current_focused, &revert_to);
-						if (last_focused && current_focused == termwin)
-							XSetInputFocus(dpy, last_focused,
-									RevertToPointerRoot, CurrentTime);
-						/* else
-						   XSetInputFocus(dpy, PointerRoot, RevertToPointerRoot, CurrentTime); */
-						if (opt_step && !fullscreen)
-							roll(UP);
-						XUnmapWindow(dpy, win);
-						hidden = 1;
-						XSync(dpy, False);
-					} else {
-						XGetInputFocus(dpy, &last_focused, &revert_to);
-						last_focused = get_toplevel_parent(last_focused);
-						XMoveWindow(dpy, win, opt_x, opt_y);
-						XMapWindow(dpy, win);
-						XRaiseWindow(dpy, win);
-						XSetInputFocus(dpy, termwin, RevertToPointerRoot,
-								CurrentTime);
-
-						if (opt_step && !fullscreen) {
-							XGrabServer(dpy);
-							roll(DOWN);
-							XUngrabServer(dpy);
-						}
-						else if (opt_xrandr)
-							update_geom(last_focused);
-						hidden = 0;
-						XSync(dpy, False);
-						XSetInputFocus(dpy, termwin, RevertToPointerRoot, CurrentTime);
-						XSync(dpy, False);
-					}
-					break;
-				}
-				if (!hidden) {
-					if (key == opt_key_full) {
-						if (!fullscreen) {
-							old_height = height;
-							height = get_display_height() - (opt_y_orig + opt_bw);
-							fullscreen = 1;
-						} else {
-							height = old_height;
-							fullscreen = 0;
-						}
-					}
-
-					/* update height inc just in case something changed for the
-					 * terminal, i.e. font size */
-					resize_inc = get_height_inc();
-					if (key == opt_key_bigger)
-						height += resize_inc;
-					if (key == opt_key_smaller)
-						height -= resize_inc;
-					if (height < resize_inc)
-						height = resize_inc;
-					/* readjust height to new resize_inc, +5 prevents the window
-					 * from getting too small */
-					height = (height / resize_inc) * resize_inc + opt_bw + 5;
-					tmp = get_display_height() - (opt_y_orig + opt_bw);
-					if (height > tmp)
-						height = tmp;
-					resize_term(opt_width, height);
-					XSetInputFocus(dpy, termwin, RevertToPointerRoot, CurrentTime);
-					XSync(dpy, False);
-				}
-				break;
-			case ButtonPress:
-				resize();
-				XSync(dpy, False);
-				break;
-			case UnmapNotify:
-				if (event.xunmap.window == termwin) {
-					if (opt_restart) {
-						if (opt_restart_hidden) {
-							roll(UP);
-							hidden = 1;
-						}
-						init_xterm(0);
-						XSync(dpy, False);
-						if (opt_restart_hidden && last_focused)
-							XSetInputFocus(dpy, last_focused,
-									RevertToPointerRoot, CurrentTime);
-						else
-							XSetInputFocus(dpy, termwin, RevertToPointerRoot,
-									CurrentTime);
-					} else {
-						if (last_focused)
-							XSetInputFocus(dpy, last_focused,
-									RevertToPointerRoot, CurrentTime);
-						XSync(dpy, False);
-						exit(0);
-					}
-				}
-				break;
-		}
-	}
-	return 0;
-}
-
-void roll(int i)
-{
-	int x = height / 100 + 1 + opt_step;
-
-	if (i == 0)
-		x = -x;
-
-	while (1) {
-		i += x;
-		XMoveWindow(dpy, win, opt_x, i);
-		XSync(dpy, False);
-		usleep(opt_delay * 100);
-		if (i / x == 0 || i < -(height + opt_bw))
+		case FocusOut:
+			/* When running a multi-monitor setup and the mouse is on screen
+			 * A and Firefox is focused on screen B, Firefox steals the
+			 * focus from yeahconsole with a 1x1 pixel window. To prevent
+			 * this issue, a refocus is performed after losing the focus */
+			XGetInputFocus(dpy, &tmpwin, &tmp);
+			XGetWindowAttributes(dpy, tmpwin, &wa);
+			if(wa.x == -1 && wa.y == -1 && wa.width == 1 && wa.height == 1
+			   && !hidden)
+				XSetInputFocus(dpy, termwin, RevertToPointerRoot,
+							   CurrentTime);
 			break;
-	}
+		case EnterNotify:
+			XSetInputFocus(dpy, termwin, RevertToPointerRoot, CurrentTime);
+			XSync(dpy, False);
+			break;
+		case LeaveNotify:
+			if(last_focused && event.xcrossing.detail != NotifyInferior) {
+				XSetInputFocus(dpy, last_focused, RevertToPointerRoot,
+							   CurrentTime);
+				XSync(dpy, False);
+			}
+			break;
+		case KeyPress:
+			key = XKeycodeToKeysym(dpy, event.xkey.keycode, 0);
+			if(key == opt_key) {
+				if(!hidden) {
+					XGetInputFocus(dpy, &current_focused, &revert_to);
+					if(last_focused && current_focused == termwin)
+						XSetInputFocus(dpy, last_focused,
+									   RevertToPointerRoot, CurrentTime);
+					/* else
+					   XSetInputFocus(dpy, PointerRoot, RevertToPointerRoot, CurrentTime); */
+					if(opt_step && !fullscreen)
+						roll(UP);
+					XUnmapWindow(dpy, win);
+					hidden = 1;
+					XSync(dpy, False);
+				}
+				else {
+					XGetInputFocus(dpy, &last_focused, &revert_to);
+					last_focused = get_toplevel_parent(last_focused);
+					XMoveWindow(dpy, win, opt_x, opt_y);
+					XMapWindow(dpy, win);
+					XRaiseWindow(dpy, win);
+					XSetInputFocus(dpy, termwin, RevertToPointerRoot,
+								   CurrentTime);
 
-}
+					if(opt_step && !fullscreen) {
+						XGrabServer(dpy);
+						roll(DOWN);
+						XUngrabServer(dpy);
+					}
+					else if(opt_xrandr)
+						update_geom(last_focused);
+					hidden = 0;
+					XSync(dpy, False);
+					XSetInputFocus(dpy, termwin, RevertToPointerRoot,
+								   CurrentTime);
+					XSync(dpy, False);
+				}
+				break;
+			}
+			if(!hidden) {
+				if(key == opt_key_full) {
+					if(!fullscreen) {
+						old_height = height;
+						height = get_display_height() - (opt_y_orig + opt_bw);
+						fullscreen = 1;
+					}
+					else {
+						height = old_height;
+						fullscreen = 0;
+					}
+				}
 
-int get_display_height()
-{
-	int height, tmp, tmp2;
-	height = DisplayHeight(dpy, screen);
-	if (opt_xrandr && get_screen_geom(win, &tmp, &tmp, &tmp, &tmp2))
-		height = tmp2;
-	return height;
-}
-
-int get_height_inc()
-{
-	int height_inc = 0;
-	XSizeHints *size;
-	long dummy;
-	size = XAllocSizeHints();
-	/* wait for terminal to initialize */
-	while(!size->height_inc)
-		XGetWMNormalHints(dpy, termwin, size, &dummy);
-	height_inc = size->height_inc;
-	XFree(size);
-	return height_inc;
-}
-
-int get_screen_geom(Window last_focused, int *x, int *y, int *w, int *h)
-{
-	int i;
-	XWindowAttributes wa;
-	XRRScreenResources *resources;
-	XRRCrtcInfo *monitor_info;
-
-	XGetWindowAttributes(dpy, last_focused, &wa);
-	/* TODO externalize resources */
-	resources = XRRGetScreenResourcesCurrent(dpy, last_focused);
-
-	for (i = 0; i < resources->ncrtc; i++) {
-		monitor_info = XRRGetCrtcInfo(dpy, resources, resources->crtcs[i]);
-		if (wa.x >= monitor_info->x && wa.x <= monitor_info->x + monitor_info->width &&
-				wa.y >= monitor_info->y && wa.y <= monitor_info->y + monitor_info->height) {
-			*x = monitor_info->x;
-			*y = monitor_info->y;
-			*w = monitor_info->width;
-			*h = monitor_info->height;
-			return 1;
+				/* update height inc just in case something changed for the
+				 * terminal, i.e. font size */
+				resize_inc = get_height_inc();
+				if(key == opt_key_bigger)
+					height += resize_inc;
+				if(key == opt_key_smaller)
+					height -= resize_inc;
+				if(height < resize_inc)
+					height = resize_inc;
+				/* readjust height to new resize_inc, +5 prevents the window
+				 * from getting too small */
+				height = (height / resize_inc) * resize_inc + opt_bw + 5;
+				tmp = get_display_height() - (opt_y_orig + opt_bw);
+				if(height > tmp)
+					height = tmp;
+				resize_term(opt_width, height);
+				XSetInputFocus(dpy, termwin, RevertToPointerRoot,
+							   CurrentTime);
+				XSync(dpy, False);
+			}
+			break;
+		case ButtonPress:
+			resize();
+			XSync(dpy, False);
+			break;
+		case UnmapNotify:
+			if(event.xunmap.window == termwin) {
+				if(opt_restart) {
+					if(opt_restart_hidden) {
+						roll(UP);
+						hidden = 1;
+					}
+					init_xterm(0);
+					XSync(dpy, False);
+					if(opt_restart_hidden && last_focused)
+						XSetInputFocus(dpy, last_focused,
+									   RevertToPointerRoot, CurrentTime);
+					else
+						XSetInputFocus(dpy, termwin, RevertToPointerRoot,
+									   CurrentTime);
+				}
+				else {
+					if(last_focused)
+						XSetInputFocus(dpy, last_focused,
+									   RevertToPointerRoot, CurrentTime);
+					XSync(dpy, False);
+					exit(0);
+				}
+			}
+			break;
 		}
 	}
 	return 0;
 }
 
-Window get_toplevel_parent(Window window)
-{
-	Window parent;
-	Window root;
-	Window *children;
-	unsigned int num_children;
-
-	while (1) {
-		if (0 == XQueryTree(dpy, window, &root, &parent, &children, &num_children)) {
-			return (Window) NULL;
-		}
-		if (children) {
-			XFree(children);
-		}
-		if (window == root || parent == root) {
-			return window;
-		}
-		else {
-			window = parent;
-		}
-	}
-
-	return (Window) NULL;
-}
-
-void resize_term(int w, int h)
-{
-	XResizeWindow(dpy, termwin, w, h);
-	XResizeWindow(dpy, win, w, h + opt_bw);
-	XSync(dpy, False);
-}
-
-void update_geom(Window last_focused) /* Determine the position of the currently selected
-										 window and open console on that screen */
-{
-	int x, y, w, h;
-	x = y = w = h = -1;
-	XWindowAttributes wa;
-
-	if (!get_screen_geom(last_focused, &x, &y, &w, &h))
-		return;
-
-	XGetWindowAttributes(dpy, win, &wa);
-	if (wa.width != w) {
-		opt_width = w;
-		resize_term(opt_width, height);
-	}
-	opt_x = x + opt_x_orig;
-	opt_y = y + opt_y_orig;
-}
-
-void get_defaults()
-{
+void
+get_defaults() {
 	char *opt;
 	XModifierKeymap *modmap;
 	unsigned int numlockmask = 0;
@@ -384,10 +274,10 @@ void get_defaults()
 
 	/* modifier stuff taken from evilwm */
 	modmap = XGetModifierMapping(dpy);
-	for (i = 0; i < 8; i++) {
-		for (j = 0; j < modmap->max_keypermod; j++) {
-			if (modmap->modifiermap[i * modmap->max_keypermod + j] ==
-					XKeysymToKeycode(dpy, XK_Num_Lock)) {
+	for(i = 0; i < 8; i++) {
+		for(j = 0; j < modmap->max_keypermod; j++) {
+			if(modmap->modifiermap[i * modmap->max_keypermod + j] ==
+			   XKeysymToKeycode(dpy, XK_Num_Lock)) {
 				numlockmask = (1 << i);
 			}
 		}
@@ -420,57 +310,166 @@ void get_defaults()
 	opt = XGetDefault(dpy, progname, "toggleKey");
 	opt_key =
 		opt ? grab_that_key(opt, numlockmask) : grab_that_key(def_key,
-				numlockmask);
+															  numlockmask);
 	opt = XGetDefault(dpy, progname, "keySmaller");
 	opt_key_smaller =
 		opt ? grab_that_key(opt,
-				numlockmask) : grab_that_key(def_key_smaller,
-					numlockmask);
+							numlockmask) : grab_that_key(def_key_smaller,
+														 numlockmask);
 	opt = XGetDefault(dpy, progname, "keyBigger");
 	opt_key_bigger =
 		opt ? grab_that_key(opt,
-				numlockmask) : grab_that_key(def_key_bigger,
-					numlockmask);
+							numlockmask) : grab_that_key(def_key_bigger,
+														 numlockmask);
 	opt = XGetDefault(dpy, progname, "keyFull");
 	opt_key_full =
 		opt ? grab_that_key(opt, numlockmask) : grab_that_key(def_key_full,
-				numlockmask);
+															  numlockmask);
 }
 
-KeySym grab_that_key(char *opt, unsigned int numlockmask)
-{
+int
+get_display_height() {
+	int height, tmp, tmp2;
+	height = DisplayHeight(dpy, screen);
+	if(opt_xrandr && get_screen_geom(win, &tmp, &tmp, &tmp, &tmp2))
+		height = tmp2;
+	return height;
+}
+
+int
+get_height_inc() {
+	int height_inc = 0;
+	XSizeHints *size;
+	long dummy;
+	size = XAllocSizeHints();
+	/* wait for terminal to initialize */
+	while(!size->height_inc)
+		XGetWMNormalHints(dpy, termwin, size, &dummy);
+	height_inc = size->height_inc;
+	XFree(size);
+	return height_inc;
+}
+
+int
+get_screen_geom(Window last_focused, int *x, int *y, int *w, int *h) {
+	int i;
+	XWindowAttributes wa;
+	XRRScreenResources *resources;
+	XRRCrtcInfo *monitor_info;
+
+	XGetWindowAttributes(dpy, last_focused, &wa);
+	/* TODO externalize resources */
+	resources = XRRGetScreenResourcesCurrent(dpy, last_focused);
+
+	for(i = 0; i < resources->ncrtc; i++) {
+		monitor_info = XRRGetCrtcInfo(dpy, resources, resources->crtcs[i]);
+		if(wa.x >= monitor_info->x
+		   && wa.x <= monitor_info->x + monitor_info->width
+		   && wa.y >= monitor_info->y
+		   && wa.y <= monitor_info->y + monitor_info->height) {
+			*x = monitor_info->x;
+			*y = monitor_info->y;
+			*w = monitor_info->width;
+			*h = monitor_info->height;
+			return 1;
+		}
+	}
+	return 0;
+}
+
+Window
+get_toplevel_parent(Window window) {
+	Window parent;
+	Window root;
+	Window *children;
+	unsigned int num_children;
+
+	while(1) {
+		if(0 ==
+		   XQueryTree(dpy, window, &root, &parent, &children,
+					  &num_children)) {
+			return (Window) NULL;
+		}
+		if(children) {
+			XFree(children);
+		}
+		if(window == root || parent == root) {
+			return window;
+		}
+		else {
+			window = parent;
+		}
+	}
+
+	return (Window) NULL;
+}
+
+KeySym
+grab_that_key(char *opt, unsigned int numlockmask) {
 	unsigned int modmask = 0;
 	KeySym keysym;
 
-	if (strstr(opt, "Control"))
+	if(strstr(opt, "Control"))
 		modmask = modmask | ControlMask;
-	if (strstr(opt, "Alt"))
+	if(strstr(opt, "Alt"))
 		modmask = modmask | Mod1Mask;
-	if (strstr(opt, "Win"))
+	if(strstr(opt, "Win"))
 		modmask = modmask | Mod4Mask;
-	if (strstr(opt, "None"))
+	if(strstr(opt, "None"))
 		modmask = 0;
 
 	opt = strrchr(opt, '+');
 	keysym = XStringToKeysym(++opt);
 
 	XGrabKey(dpy, XKeysymToKeycode(dpy, keysym), modmask, root, True,
-			GrabModeAsync, GrabModeAsync);
+			 GrabModeAsync, GrabModeAsync);
 	XGrabKey(dpy, XKeysymToKeycode(dpy, keysym), LockMask | modmask, root,
-			True, GrabModeAsync, GrabModeAsync);
-	if (numlockmask) {
+			 True, GrabModeAsync, GrabModeAsync);
+	if(numlockmask) {
 		XGrabKey(dpy, XKeysymToKeycode(dpy, keysym), numlockmask | modmask,
-				root, True, GrabModeAsync, GrabModeAsync);
+				 root, True, GrabModeAsync, GrabModeAsync);
 		XGrabKey(dpy, XKeysymToKeycode(dpy, keysym),
-				numlockmask | LockMask | modmask, root, True,
-				GrabModeAsync, GrabModeAsync);
+				 numlockmask | LockMask | modmask, root, True,
+				 GrabModeAsync, GrabModeAsync);
 
 	}
 	return keysym;
 }
 
-void init_win()
-{
+int
+handle_xerror(Display * display, XErrorEvent * e) {
+	/* this function does nothing, we receive xerrors
+	   when the last_focused window gets lost.. */
+	/* fprintf(stderr, "XError caught\n"); */
+	fprintf(stderr, "%d  XError caught\n", e->error_code);
+	return 0;
+}
+
+void
+init_command(int argc, char *argv[]) {
+
+	int i;
+	char *pos;
+	pos = command;
+	if(strstr(opt_term, "urxvt"))
+		pos +=
+			sprintf(pos, "%s -b 0 -embed %d -name %s ", opt_term, (int) win,
+					progname);
+	if(strstr(opt_term, "st"))
+		pos += sprintf(pos, "%s -w %d -t %s ", opt_term, (int) win, progname);
+	else
+		pos +=
+			sprintf(pos, "%s -b 0 -into %d -name %s ", opt_term, (int) win,
+					progname);
+	for(i = 1; i < argc; i++) {
+		pos += sprintf(pos, "%s ", argv[i]);
+
+	}
+	sprintf(pos, "&");
+}
+
+void
+init_win() {
 	XSetWindowAttributes attrib;
 	XColor color;
 	XColor dummy_color;
@@ -478,29 +477,30 @@ void init_win()
 	attrib.override_redirect = True;
 	attrib.background_pixel = BlackPixel(dpy, screen);
 	win = XCreateWindow(dpy, root,
-			opt_x, -200, opt_width, 200,
-			0, CopyFromParent, InputOutput, CopyFromParent,
-			CWOverrideRedirect | CWBackPixel, &attrib);
+						opt_x, -200, opt_width, 200,
+						0, CopyFromParent, InputOutput, CopyFromParent,
+						CWOverrideRedirect | CWBackPixel, &attrib);
 	XSelectInput(dpy, win,
-			SubstructureNotifyMask | EnterWindowMask | LeaveWindowMask
-			| KeyPressMask | ButtonPressMask | ButtonReleaseMask | FocusChangeMask);
+				 SubstructureNotifyMask | EnterWindowMask | LeaveWindowMask
+				 | KeyPressMask | ButtonPressMask | ButtonReleaseMask |
+				 FocusChangeMask);
 	XAllocNamedColor(dpy, DefaultColormap(dpy, screen), opt_color, &color,
-			&dummy_color);
+					 &dummy_color);
 	XSetWindowBackground(dpy, win, color.pixel);
 	XDefineCursor(dpy, win, cursor);
 	/* start unmaped */
 	XUnmapWindow(dpy, win);
 }
 
-void init_xterm(move)
-{
+void
+init_xterm(move) {
 	XEvent ev;
 	long dummy;
 
 	system(command);
-	while (1) {
+	while(1) {
 		XMaskEvent(dpy, SubstructureNotifyMask, &ev);
-		if (ev.type == CreateNotify || ev.type == MapNotify) {
+		if(ev.type == CreateNotify || ev.type == MapNotify) {
 			termwin = ev.xcreatewindow.window;
 			break;
 		}
@@ -508,10 +508,10 @@ void init_xterm(move)
 
 	XSetWindowBorderWidth(dpy, termwin, 0);
 	resize_inc = get_height_inc();
-	if (move)
+	if(move)
 		height = resize_inc * opt_height;
 	resize_term(opt_width, height);
-	if (move) {
+	if(move) {
 		XMoveWindow(dpy, win, opt_x, -(height + opt_bw));
 		XSync(dpy, False);
 	}
@@ -519,64 +519,75 @@ void init_xterm(move)
 	XSync(dpy, False);
 }
 
-void init_command(int argc, char *argv[])
-{
-
-	int i;
-	char *pos;
-	pos = command;
-	if (strstr(opt_term, "urxvt"))
-		pos +=
-			sprintf(pos, "%s -b 0 -embed %d -name %s ", opt_term, (int) win,
-					progname);
-	if (strstr(opt_term, "st"))
-		pos +=
-			sprintf(pos, "%s -w %d -t %s ", opt_term, (int) win,
-					progname);
-	else
-		pos +=
-			sprintf(pos, "%s -b 0 -into %d -name %s ", opt_term, (int) win,
-					progname);
-	for (i = 1; i < argc; i++) {
-		pos += sprintf(pos, "%s ", argv[i]);
-
-	}
-	sprintf(pos, "&");
-}
-
-void resize()
-{
+void
+resize() {
 	XEvent ev;
-	if (!XGrabPointer
-			(dpy, root, False,
-			 ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
-			 GrabModeAsync, GrabModeAsync, None, cursor,
-			 CurrentTime) == GrabSuccess)
+	if(!XGrabPointer
+	   (dpy, root, False,
+		ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
+		GrabModeAsync, GrabModeAsync, None, cursor,
+		CurrentTime) == GrabSuccess)
 		return;
-	for (;;) {
+	for(;;) {
 		XMaskEvent(dpy,
-				ButtonPressMask | ButtonReleaseMask |
-				PointerMotionHintMask, &ev);
+				   ButtonPressMask | ButtonReleaseMask |
+				   PointerMotionHintMask, &ev);
 		switch (ev.type) {
-			case MotionNotify:
-				if (ev.xmotion.y >= resize_inc) {
-					height = ev.xmotion.y - ev.xmotion.y % resize_inc;
-					resize_term(opt_width, height);
-					break;
-					case ButtonRelease:
-					XUngrabPointer(dpy, CurrentTime);
-					return;
+		case MotionNotify:
+			if(ev.xmotion.y >= resize_inc) {
+				height = ev.xmotion.y - ev.xmotion.y % resize_inc;
+				resize_term(opt_width, height);
+				break;
+		case ButtonRelease:
+				XUngrabPointer(dpy, CurrentTime);
+				return;
 
-				}
+			}
 		}
 	}
 }
 
-int handle_xerror(Display * display, XErrorEvent * e)
-{
-	/* this function does nothing, we receive xerrors
-	   when the last_focused window gets lost.. */
-	/* fprintf(stderr, "XError caught\n"); */
-	fprintf(stderr, "%d  XError caught\n", e->error_code);
-	return 0;
+void
+resize_term(int w, int h) {
+	XResizeWindow(dpy, termwin, w, h);
+	XResizeWindow(dpy, win, w, h + opt_bw);
+	XSync(dpy, False);
 }
+
+void
+update_geom(Window last_focused) {	/* Determine the position of the currently selected
+									   window and open console on that screen */
+	int x, y, w, h;
+	x = y = w = h = -1;
+	XWindowAttributes wa;
+
+	if(!get_screen_geom(last_focused, &x, &y, &w, &h))
+		return;
+
+	XGetWindowAttributes(dpy, win, &wa);
+	if(wa.width != w) {
+		opt_width = w;
+		resize_term(opt_width, height);
+	}
+	opt_x = x + opt_x_orig;
+	opt_y = y + opt_y_orig;
+}
+
+void
+roll(int i) {
+	int x = height / 100 + 1 + opt_step;
+
+	if(i == 0)
+		x = -x;
+
+	while(1) {
+		i += x;
+		XMoveWindow(dpy, win, opt_x, i);
+		XSync(dpy, False);
+		usleep(opt_delay * 100);
+		if(i / x == 0 || i < -(height + opt_bw))
+			break;
+	}
+
+}
+
