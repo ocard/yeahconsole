@@ -61,6 +61,7 @@ int resize_inc;
 void get_defaults(void);
 int get_display_height();
 int get_height_inc();
+int get_optimal_height(int h);
 int get_screen_geom(Window last_focused, int *x, int *y, int *w, int *h);
 Window get_toplevel_parent(Window window);
 KeySym grab_that_key(char *opt, unsigned int numlockmask);
@@ -197,7 +198,7 @@ main(int argc, char *argv[]) {
 				if(key == opt_key_full) {
 					if(!fullscreen) {
 						old_height = height;
-						height = get_display_height() - (opt_y_orig + opt_bw);
+						height = get_optimal_height(get_display_height());
 						fullscreen = 1;
 					}
 					else {
@@ -215,12 +216,7 @@ main(int argc, char *argv[]) {
 					height -= resize_inc;
 				if(height < resize_inc)
 					height = resize_inc;
-				/* readjust height to new resize_inc, +5 prevents the window
-				 * from getting too small */
-				height = (height / resize_inc) * resize_inc + 5;
-				tmp = get_display_height() - (opt_y_orig + opt_bw);
-				if(height > tmp)
-					height = tmp;
+				height = get_optimal_height(height);
 				resize_term(opt_width, height);
 				XSetInputFocus(dpy, termwin, RevertToPointerRoot,
 							   CurrentTime);
@@ -348,6 +344,22 @@ get_height_inc() {
 	height_inc = size->height_inc;
 	XFree(size);
 	return height_inc;
+}
+
+int
+get_optimal_height(int h) {
+	int height, dh;
+
+	resize_inc = get_height_inc();
+	height = (h / resize_inc) * resize_inc;
+	if (!height) height = resize_inc;
+	/* readjust height to new resize_inc, +5 prevents the window
+	 * from getting too small */
+	if (height == resize_inc) height += 5;
+	dh = get_display_height() - (opt_y_orig + opt_bw);
+	if(height > dh)
+		height = (dh / resize_inc) * resize_inc;
+	return height;
 }
 
 int
@@ -520,7 +532,6 @@ init_xterm(move) {
 
 void
 resize() {
-	int tmp;
 	XEvent ev;
 	if(!XGrabPointer
 	   (dpy, root, False,
@@ -536,10 +547,8 @@ resize() {
 		switch (ev.type) {
 		case MotionNotify:
 			if(ev.xmotion.y >= resize_inc) {
-				height = ev.xmotion.y - ev.xmotion.y % resize_inc + 5;
-				tmp = get_display_height() - (opt_y_orig + opt_bw);
-				if(height > tmp)
-					height = tmp;
+				height = ev.xmotion.y - ev.xmotion.y % resize_inc;
+				height = get_optimal_height(height);
 				resize_term(opt_width, height);
 				break;
 		case ButtonRelease:
