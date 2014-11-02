@@ -38,8 +38,6 @@
 
 #define UP 0
 #define DOWN -height -opt_bw
-#define transparency_hack() XResizeWindow(dpy, termwin, opt_width, height -1);\
-	XResizeWindow(dpy, termwin, opt_width, height )
 
 Display *dpy;
 Window root;
@@ -59,6 +57,8 @@ KeySym opt_key_full;
 Cursor cursor;
 int resize_inc;
 void roll(int i);
+int get_display_height();
+int get_height_inc();
 int get_screen_geom(Window last_focused, int *x, int *y, int *w, int *h);
 Window get_toplevel_parent(Window window);
 void resize_term(int w, int h);
@@ -96,7 +96,7 @@ int main(int argc, char *argv[])
 					"-e: program to execute\n"
 					"you can configure me via xresources:\n"
 					"%s*foo:value\n"
-					"foo can be any standard xterm/urxvt xresource or:\n"
+					"foo can be any standard xterm/urxvt/st xresource or:\n"
 					"resource               default value\n\n"
 					"term:                  xterm\n"
 					"restart:               0\n"
@@ -163,12 +163,14 @@ int main(int argc, char *argv[])
 						   XSetInputFocus(dpy, PointerRoot, RevertToPointerRoot, CurrentTime); */
 						if (opt_step && !fullscreen)
 							roll(UP);
-						XMoveWindow(dpy, win, opt_x, -height - opt_bw);
+						XUnmapWindow(dpy, win);
 						hidden = 1;
 						XSync(dpy, False);
 					} else {
 						XGetInputFocus(dpy, &last_focused, &revert_to);
 						last_focused = get_toplevel_parent(last_focused);
+						XMoveWindow(dpy, win, opt_x, opt_y);
+						XMapWindow(dpy, win);
 						XRaiseWindow(dpy, win);
 						XSetInputFocus(dpy, termwin, RevertToPointerRoot,
 								CurrentTime);
@@ -180,10 +182,9 @@ int main(int argc, char *argv[])
 						}
 						else if (opt_xrandr)
 							update_geom(last_focused);
-						XMoveWindow(dpy, win, opt_x, opt_y);
-
-						transparency_hack();
 						hidden = 0;
+						XSync(dpy, False);
+						XSetInputFocus(dpy, termwin, RevertToPointerRoot, CurrentTime);
 						XSync(dpy, False);
 					}
 					break;
@@ -192,13 +193,7 @@ int main(int argc, char *argv[])
 					if (key == opt_key_full) {
 						if (!fullscreen) {
 							old_height = height;
-							height = DisplayHeight(dpy, screen);
-							if (opt_xrandr) {
-								int tmp, tmp2;
-								if (get_screen_geom(win, &tmp, &tmp, &tmp, &tmp2))
-									height = tmp2;
-							}
-							height -=  opt_y_orig + opt_bw;
+							height = get_display_height() - (opt_y_orig + opt_bw);
 							fullscreen = 1;
 						} else {
 							height = old_height;
@@ -206,14 +201,24 @@ int main(int argc, char *argv[])
 						}
 					}
 
+					/* update height inc just in case something changed for the
+					 * terminal, i.e. font size */
+					resize_inc = get_height_inc();
 					if (key == opt_key_bigger)
 						height += resize_inc;
 					if (key == opt_key_smaller)
 						height -= resize_inc;
 					if (height < resize_inc)
 						height = resize_inc;
+					/* readjust height to new resize_inc, +5 prevents the window
+					 * from getting too small */
+					height = (height / resize_inc) * resize_inc + opt_bw + 5;
+					tmp = get_display_height() - (opt_y_orig + opt_bw);
+					if (height > tmp)
+						height = tmp;
 					resize_term(opt_width, height);
-					/* XSetInputFocus(dpy, termwin, RevertToPointerRoot, CurrentTime); */
+					XSetInputFocus(dpy, termwin, RevertToPointerRoot, CurrentTime);
+					XSync(dpy, False);
 				}
 				break;
 			case ButtonPress:
@@ -265,6 +270,29 @@ void roll(int i)
 			break;
 	}
 
+}
+
+int get_display_height()
+{
+	int height, tmp, tmp2;
+	height = DisplayHeight(dpy, screen);
+	if (opt_xrandr && get_screen_geom(win, &tmp, &tmp, &tmp, &tmp2))
+		height = tmp2;
+	return height;
+}
+
+int get_height_inc()
+{
+	int height_inc = 0;
+	XSizeHints *size;
+	long dummy;
+	size = XAllocSizeHints();
+	/* wait for terminal to initialize */
+	while(!size->height_inc)
+		XGetWMNormalHints(dpy, termwin, size, &dummy);
+	height_inc = size->height_inc;
+	XFree(size);
+	return height_inc;
 }
 
 int get_screen_geom(Window last_focused, int *x, int *y, int *w, int *h)
@@ -460,14 +488,14 @@ void init_win()
 			&dummy_color);
 	XSetWindowBackground(dpy, win, color.pixel);
 	XDefineCursor(dpy, win, cursor);
-	XMapWindow(dpy, win);
+	/* start unmaped */
+	XUnmapWindow(dpy, win);
 }
 
 void init_xterm(move)
 {
 	XEvent ev;
 	long dummy;
-	XSizeHints *size;
 
 	system(command);
 	while (1) {
@@ -479,17 +507,16 @@ void init_xterm(move)
 	}
 
 	XSetWindowBorderWidth(dpy, termwin, 0);
-	size = XAllocSizeHints();
-	XGetWMNormalHints(dpy, termwin, size, &dummy);
-	resize_inc = size->height_inc;
+	resize_inc = get_height_inc();
 	if (move)
 		height = resize_inc * opt_height;
-	XFree(size);
 	resize_term(opt_width, height);
 	if (move) {
 		XMoveWindow(dpy, win, opt_x, -(height + opt_bw));
 		XSync(dpy, False);
 	}
+	XSetInputFocus(dpy, termwin, RevertToPointerRoot, CurrentTime);
+	XSync(dpy, False);
 }
 
 void init_command(int argc, char *argv[])
@@ -501,6 +528,10 @@ void init_command(int argc, char *argv[])
 	if (strstr(opt_term, "urxvt"))
 		pos +=
 			sprintf(pos, "%s -b 0 -embed %d -name %s ", opt_term, (int) win,
+					progname);
+	if (strstr(opt_term, "st"))
+		pos +=
+			sprintf(pos, "%s -w %d -t %s ", opt_term, (int) win,
 					progname);
 	else
 		pos +=
