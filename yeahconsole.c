@@ -503,9 +503,8 @@ init_win() {
 }
 
 void
-init_xterm(move) {
+init_xterm(int move) {
 	XEvent ev;
-	long dummy;
 
 	system(command);
 	while(1) {
@@ -532,10 +531,10 @@ void
 resize() {
 	XEvent ev;
 	if(!XGrabPointer
-	   (dpy, root, False,
-		ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
-		GrabModeAsync, GrabModeAsync, None, cursor,
-		CurrentTime) == GrabSuccess)
+			(dpy, root, False,
+			 ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
+			 GrabModeAsync, GrabModeAsync, None, cursor,
+			 CurrentTime) == GrabSuccess)
 		return;
 	resize_inc = get_height_inc();
 	while(1) {
@@ -552,7 +551,6 @@ resize() {
 		case ButtonRelease:
 				XUngrabPointer(dpy, CurrentTime);
 				return;
-
 			}
 		}
 	}
