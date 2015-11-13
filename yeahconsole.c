@@ -132,13 +132,8 @@ main(int argc, char *argv[])
 		XNextEvent(dpy, &event);
 		switch (event.type) {
 		case FocusOut:
-			/* When running a multi-monitor setup and the mouse is on screen
-			 * A and Firefox is focused on screen B, Firefox steals the
-			 * focus from yeahconsole with a 1x1 pixel window. To prevent
-			 * this issue, a refocus is performed after losing the focus */
-			XGetInputFocus(dpy, &tmpwin, &tmp);
-			XGetWindowAttributes(dpy, tmpwin, &wa);
-			if (wa.x == -1 && wa.y == -1 && wa.width == 1 && wa.height == 1 && !hidden)
+			/* Always keep input focus when visible */
+			if (!hidden)
 				XSetInputFocus(dpy, termwin, RevertToPointerRoot, CurrentTime);
 			break;
 		case EnterNotify:
