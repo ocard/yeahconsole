@@ -48,6 +48,7 @@ Window termwin;
 char *progname, command[256];
 int revert_to;
 int screen;
+int base;
 int opt_x, opt_x_orig, opt_y, opt_y_orig, opt_width, opt_height, opt_delay,
 	opt_bw, opt_step, opt_xrandr, height, opt_restart, opt_restart_hidden;
 char *opt_color;
@@ -122,6 +123,7 @@ main(int argc, char *argv[])
 	}
 	screen = DefaultScreen(dpy);
 	root = RootWindow(dpy, screen);
+	base = DisplayHeight(dpy, screen);
 	XSetErrorHandler(handle_xerror);
 	cursor = XCreateFontCursor(dpy, XC_double_arrow);
 	get_defaults();
@@ -132,8 +134,13 @@ main(int argc, char *argv[])
 		XNextEvent(dpy, &event);
 		switch (event.type) {
 		case FocusOut:
-			/* Always keep input focus when visible */
-			if (!hidden)
+			/* When running a multi-monitor setup and the mouse is on screen
+			 * A and Firefox is focused on screen B, Firefox steals the
+			 * focus from yeahconsole with a 1x1 pixel window. To prevent
+			 * this issue, a refocus is performed after losing the focus */
+			XGetInputFocus(dpy, &tmpwin, &tmp);
+			XGetWindowAttributes(dpy, tmpwin, &wa);
+			if (wa.x == -1 && wa.y == -1 && wa.width == 1 && wa.height == 1 && !hidden)
 				XSetInputFocus(dpy, termwin, RevertToPointerRoot, CurrentTime);
 			break;
 		case EnterNotify:
@@ -164,17 +171,18 @@ main(int argc, char *argv[])
 				else {
 					XGetInputFocus(dpy, &last_focused, &revert_to);
 					last_focused = get_toplevel_parent(last_focused);
-
+					XMapWindow(dpy, win);
+					XRaiseWindow(dpy, win);
+					
 					if (opt_step && !fullscreen) {
-						XGrabServer(dpy);
+						// XGrabServer(dpy);
 						roll(DOWN);
-						XUngrabServer(dpy);
+						// XUngrabServer(dpy);
 					}
 					else if (opt_xrandr)
 						update_geom(last_focused);
-					XMoveWindow(dpy, win, opt_x, opt_y);
-					XMapWindow(dpy, win);
-					XRaiseWindow(dpy, win);
+					XMoveWindow(dpy, win, opt_x, base-height);
+					
 					XSetInputFocus(dpy, termwin, RevertToPointerRoot, CurrentTime);
 					hidden = 0;
 					XSync(dpy, False);
@@ -401,6 +409,8 @@ grab_that_key(char *opt, unsigned int numlockmask)
 
 	if (strstr(opt, "Control"))
 		modmask = modmask | ControlMask;
+	if (strstr(opt, "Shift"))
+		modmask = modmask | ShiftMask;
 	if (strstr(opt, "Alt"))
 		modmask = modmask | Mod1Mask;
 	if (strstr(opt, "Win"))
@@ -409,7 +419,8 @@ grab_that_key(char *opt, unsigned int numlockmask)
 		modmask = 0;
 
 	opt = strrchr(opt, '+');
-	keysym = XStringToKeysym(++opt);
+	if (*(++opt) == 'z') keysym = XK_less;
+	else keysym = XStringToKeysym(opt);
 
 	XGrabKey(dpy, XKeysymToKeycode(dpy, keysym), modmask, root, True, GrabModeAsync, GrabModeAsync);
 	XGrabKey(dpy, XKeysymToKeycode(dpy, keysym), LockMask | modmask, root, True, GrabModeAsync, GrabModeAsync);
@@ -458,12 +469,18 @@ init_win()
 	XSetWindowAttributes attrib;
 	XColor color;
 	XColor dummy_color;
+	
+	XVisualInfo vinfo;
+    XMatchVisualInfo(dpy, DefaultScreen(dpy), 32, TrueColor, &vinfo);
 
 	attrib.override_redirect = True;
-	attrib.background_pixel = BlackPixel(dpy, screen);
+	attrib.background_pixel = 0;
+    attrib.border_pixel = 0;
+    attrib.colormap = XCreateColormap(dpy, XDefaultRootWindow(dpy), vinfo.visual, AllocNone);
+
 	win = XCreateWindow(dpy, root,
 						opt_x, -200, opt_width, 200,
-						0, CopyFromParent, InputOutput, CopyFromParent, CWOverrideRedirect | CWBackPixel, &attrib);
+						0, vinfo.depth, InputOutput, vinfo.visual, CWOverrideRedirect | CWColormap | CWBorderPixel | CWBackPixel, &attrib);
 	XSelectInput(dpy, win,
 				 SubstructureNotifyMask | EnterWindowMask | LeaveWindowMask
 				 | KeyPressMask | ButtonPressMask | ButtonReleaseMask | FocusChangeMask);
@@ -530,6 +547,7 @@ resize()
 void
 resize_term(int w, int h)
 {
+	XMoveWindow(dpy, win, opt_x, base-height);
 	XResizeWindow(dpy, termwin, w, h);
 	XResizeWindow(dpy, win, w, h + opt_bw);
 	XSync(dpy, False);
@@ -558,17 +576,19 @@ update_geom(Window last_focused)
 void
 roll(int i)
 {
-	int x = height / 100 + 1 + opt_step;
-
-	if (i == 0)
+    int x = height / 100 + 1 + opt_step; /*	<- 3 */
+	
+    if (i == DOWN) {
+		i = base;
 		x = -x;
-
-	while (1) {
+	}else{
+		i = base-height;
+	}
+    while (1) {
 		i += x;
 		XMoveWindow(dpy, win, opt_x, i);
 		XSync(dpy, False);
 		usleep(opt_delay * 100);
-		if (i / x == 0 || i < -(height + opt_bw))
-			break;
-	}
+		if (i > base || i < base-height) break;
+    }
 }

@@ -6,8 +6,8 @@ INSTALL = install
 PREFIX = /usr/local
 
 LIBS = -lX11 -lXrandr
-INCLUDES = -I/usr/X11R6/include
-LIB_DIRS = -L/usr/X11R6/lib
+INCLUDES = -I/usr/include/X11
+LIB_DIRS = -L/usr/lib/X11
 FLAGS = -Os -Wall -g
 
 OBJECTS := yeahconsole.o
